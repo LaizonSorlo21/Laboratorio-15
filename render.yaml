@@ -1,0 +1,34 @@
+# Blueprint de Render (plan gratuito): 3 servicios web Docker.
+# Las variables marcadas con sync: false (secretos) se ingresan en el panel de Render, no en el repositorio.
+services:
+  - type: web
+    name: vet-lab15-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./VeterinariaApp.Api/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: Database__Provider
+        value: Postgres
+      - key: ConnectionStrings__VeterinariaConnection
+        sync: false
+      - key: Jwt__Clave
+        sync: false
+  - type: web
+    name: vet-lab15-vacunas
+    runtime: docker
+    plan: free
+    dockerfilePath: ./VacunasApi/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: Jwt__Clave
+        sync: false
+  - type: web
+    name: vet-lab15-gateway
+    runtime: docker
+    plan: free
+    dockerfilePath: ./GatewayApi/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: Jwt__Clave
+        sync: false

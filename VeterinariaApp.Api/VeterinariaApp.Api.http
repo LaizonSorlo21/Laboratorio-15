@@ -1,0 +1,262 @@
+# Pruebas de la S14 (JWT). Extensión "REST Client" de VS Code (o Visual Studio con ajuste de sintaxis).
+# Orden: ejecuta primero los dos logins (loginVet y loginRecep); el resto reutiliza sus tokens.
+# Claves de prueba (solo para desarrollo, ver Database/script.sql):
+#   veterinario@veterinaria.com / Vet#2026!Clave        (rol Veterinario)
+#   recepcion@veterinaria.com   / Recep#2026!Clave      (rol Recepcionista)
+
+@baseUrl = http://localhost:5000/api
+
+############################################################
+# 1. AUTENTICACIÓN
+############################################################
+
+### 200 - Login Veterinario (devuelve el token)
+# @name loginVet
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "correo": "veterinario@veterinaria.com",
+  "clave": "Vet#2026!Clave"
+}
+
+### 200 - Login Recepcionista
+# @name loginRecep
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "correo": "recepcion@veterinaria.com",
+  "clave": "Recep#2026!Clave"
+}
+
+### 401 - Login con clave incorrecta (correo existente)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "correo": "veterinario@veterinaria.com",
+  "clave": "ClaveEquivocada123"
+}
+
+### 401 - Login con correo inexistente (mismo 401 y mismo cuerpo que el anterior)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "correo": "fantasma@veterinaria.com",
+  "clave": "ClaveEquivocada123"
+}
+
+### 400 - Login con datos inválidos (correo mal formado, clave corta)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "correo": "no-es-un-correo",
+  "clave": "123"
+}
+
+### 201 - Registro (el rol lo asigna el servidor: Recepcionista)
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{
+  "correo": "nuevo.usuario@veterinaria.com",
+  "clave": "NuevaClave#2026"
+}
+
+### 409 - Registro con correo repetido
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{
+  "correo": "nuevo.usuario@veterinaria.com",
+  "clave": "NuevaClave#2026"
+}
+
+### 400 - Registro con datos inválidos
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{
+  "correo": "otro@veterinaria.com",
+  "clave": "corta"
+}
+
+### 201 - Registro intentando colar un rol: el campo "rol" se ignora y queda Recepcionista
+POST {{baseUrl}}/auth/registro
+Content-Type: application/json
+
+{
+  "correo": "intruso@veterinaria.com",
+  "clave": "Intruso#2026!",
+  "rol": "Veterinario"
+}
+
+### 200 - Perfil con token de Veterinario (correo y rol salen de los claims)
+GET {{baseUrl}}/auth/perfil
+Authorization: Bearer {{loginVet.response.body.token}}
+
+### 200 - Perfil con token de Recepcionista
+GET {{baseUrl}}/auth/perfil
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+### 401 - Perfil sin token
+GET {{baseUrl}}/auth/perfil
+
+### 401 - Perfil con un token manipulado (firma inválida)
+GET {{baseUrl}}/auth/perfil
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJoYWNrZXJAeC5jb20iLCJyb2xlIjoiVmV0ZXJpbmFyaW8ifQ.firma-falsa
+
+############################################################
+# 2. ENDPOINT PÚBLICO ([AllowAnonymous])
+############################################################
+
+### 200 - Especies atendidas (sin token)
+GET {{baseUrl}}/mascotas/especies
+
+############################################################
+# 3. SOLO AUTENTICADO ([Authorize])
+############################################################
+
+### 401 - Listar propietarios sin token
+GET {{baseUrl}}/propietarios
+
+### 200 - Listar propietarios (Recepcionista)
+GET {{baseUrl}}/propietarios
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+### 200 - Listar propietarios (Veterinario)
+GET {{baseUrl}}/propietarios?nombre=ana
+Authorization: Bearer {{loginVet.response.body.token}}
+
+### 200 - Mascotas de un propietario (ruta anidada)
+GET {{baseUrl}}/propietarios/1/mascotas
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+### 404 - Mascota inexistente
+GET {{baseUrl}}/mascotas/999
+Authorization: Bearer {{loginVet.response.body.token}}
+
+### 404 - Propietario inexistente
+GET {{baseUrl}}/propietarios/999
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+############################################################
+# 4. ESCRITURA ([Authorize(Roles = "Recepcionista,Veterinario")])
+############################################################
+
+### 401 - Crear propietario sin token
+POST {{baseUrl}}/propietarios
+Content-Type: application/json
+
+{
+  "nombre": "Carlos",
+  "apellido": "Ramos",
+  "email": "carlos.ramos@example.com"
+}
+
+### 201 - Crear propietario (Recepcionista)
+# @name crearProp
+POST {{baseUrl}}/propietarios
+Content-Type: application/json
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+{
+  "nombre": "Carlos",
+  "apellido": "Ramos",
+  "email": "carlos.ramos@example.com",
+  "telefono": "911222333",
+  "direccion": "Av. Central 100"
+}
+
+### 400 - Crear propietario con datos inválidos (Recepcionista)
+POST {{baseUrl}}/propietarios
+Content-Type: application/json
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+{
+  "nombre": "",
+  "apellido": "Ramos",
+  "email": "no-es-un-correo"
+}
+
+### 409 - Crear propietario con email ya registrado (regla de negocio)
+POST {{baseUrl}}/propietarios
+Content-Type: application/json
+Authorization: Bearer {{loginVet.response.body.token}}
+
+{
+  "nombre": "Ana",
+  "apellido": "Gomez",
+  "email": "ana.gomez@example.com"
+}
+
+### 204 - Actualizar propietario (Recepcionista)
+PUT {{baseUrl}}/propietarios/3
+Content-Type: application/json
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+{
+  "nombre": "Maria",
+  "apellido": "Torres",
+  "email": "maria.torres@example.com",
+  "telefono": "965432109",
+  "direccion": "Calle Las Palmeras 789, dpto 4B"
+}
+
+### 201 - Crear mascota (Recepcionista)
+POST {{baseUrl}}/mascotas
+Content-Type: application/json
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+{
+  "nombre": "Toby",
+  "especie": "Perro",
+  "raza": "Beagle",
+  "fechaNacimiento": "2022-02-20",
+  "peso": 12.5,
+  "propietarioId": 2
+}
+
+### 404 - Crear mascota con propietario inexistente
+POST {{baseUrl}}/mascotas
+Content-Type: application/json
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+{
+  "nombre": "Simba",
+  "especie": "Gato",
+  "raza": "Mestizo",
+  "fechaNacimiento": "2022-02-20",
+  "peso": 4,
+  "propietarioId": 999
+}
+
+############################################################
+# 5. SOLO VETERINARIO ([Authorize(Roles = "Veterinario")])
+############################################################
+
+### 403 - Eliminar propietario con rol Recepcionista (autenticado, pero sin permiso)
+DELETE {{baseUrl}}/propietarios/{{crearProp.response.body.id}}
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+### 403 - Eliminar mascota con rol Recepcionista
+DELETE {{baseUrl}}/mascotas/4
+Authorization: Bearer {{loginRecep.response.body.token}}
+
+### 401 - Eliminar propietario sin token
+DELETE {{baseUrl}}/propietarios/{{crearProp.response.body.id}}
+
+### 409 - Eliminar propietario con mascotas (Veterinario, regla de negocio)
+DELETE {{baseUrl}}/propietarios/1
+Authorization: Bearer {{loginVet.response.body.token}}
+
+### 204 - Eliminar propietario sin mascotas (Veterinario)
+DELETE {{baseUrl}}/propietarios/{{crearProp.response.body.id}}
+Authorization: Bearer {{loginVet.response.body.token}}
+
+### 204 - Eliminar mascota (Veterinario)
+DELETE {{baseUrl}}/mascotas/4
+Authorization: Bearer {{loginVet.response.body.token}}

@@ -1,0 +1,18 @@
+bin/
+obj/
+.vs/
+*.user
+
+# Secretos y configuración local (nunca al repositorio)
+appsettings.Local.json
+appsettings.*.local.json
+secrets.json
+.env
+.env.*
+*.pfx
+
+# Evidencias (solo locales, ya están en el documento)
+Evidencias/
+
+# Ajustes locales del editor
+.vscode/
